@@ -1,9 +1,10 @@
-with Ada.Text_IO;
 with Ada.Assertions;
+with Ada.Text_IO;
 
 package body Blake3 is
 
 	-- Public API
+	-- NOT IMPLEMENTED: New_Derive_Key
 
 	-- No New_Internal function since this causes problems regarding
 	-- dispatch
@@ -13,6 +14,27 @@ package body Blake3 is
 				CV_Stack     => (others => (others => 0)),
 				CV_Stack_Len => 0,
 				Flags        => 0);
+
+	function Init(Key: in U8x32) return Hasher is
+		Key_Words_I: U32x8;
+	begin
+		Words_From_Little_Endian_Bytes(Key, Key_Words_I);
+		return (
+			Chunk_State  => New_Chunk_State(
+						Key_Words_I, 0, Keyed_Hash),
+			Key_Words    => Key_Words_I,
+			CV_Stack     => (others => (others => 0)),
+			CV_Stack_Len => 0,
+			Flags        => Keyed_Hash
+		);
+	end Init;
+
+	function Init(Key: in String) return Hasher is
+		Key_Conv: U8x32;
+		for Key_Conv'Address use Key'Address;
+	begin
+		return Init(Key_Conv);
+	end Init;
 
 	procedure Update(Self: in out Hasher; Input: in String) is
 		Conv: Octets(0 .. Input'Length - 1);
@@ -30,12 +52,11 @@ package body Blake3 is
 	function Final(Self: in Hasher) return String is
 		Conv:   Octets(0 .. 31);
 		Result: String(1 .. 32);
-		for Result'Address use Conv'Address;
 	begin
 		Self.Final(Conv);
-		--for I in Result'Range loop
-		--	Result(I) := Character'Val(Conv(U32(I - Result'First)));
-		--end loop;
+		for I in Result'Range loop
+			Result(I) := Character'Val(Conv(U32(I - Result'First)));
+		end loop;
 		return Result;
 	end Final;
 
@@ -52,6 +73,7 @@ package body Blake3 is
 				Self.Flags
 			);
 		end loop;
+		Ada.Text_IO.Put_Line("Out_Slice'First = " & U32'Image(Out_Slice'First) & ", Out_Slice'Last = " & U32'Image(Out_Slice'Last) & ", Out_Slice'Length = " & Integer'Image(Out_Slice'Length));
 		Root_Output_Bytes(Output, Out_Slice);
 	end Final;
 
@@ -185,15 +207,20 @@ package body Blake3 is
 	function First_8_Words(Compression_Output: in U32x16) return U32x8 is
 					(U32x8(Compression_Output(0 .. 7)));
 
-	function Load_32(Src: in Octets) return U32 is
-		(U32(Src(Src'First)) or Shift_Left(U32(Src(Src'First + 1)), 8)
-		or Shift_Left(U32(Src(Src'First + 2)), 16) or
-		Shift_Left(U32(Src(Src'First + 3)), 24));
-
+	-- It is not overly efficient to perform this operation explicitly.
+	-- If one wants more performance at the execess of portability, can
+	-- also convert between the datatypes by having
+	-- `for W'Address use B'Address` at the respective invocation locations
 	procedure Words_From_Little_Endian_Bytes(B: in Octets; W: out Words) is
+		function Load_32(Src: in Octets) return U32 is
+			(U32(Src(Src'First)) or
+			Shift_Left(U32(Src(Src'First + 1)), 8) or
+			Shift_Left(U32(Src(Src'First + 2)), 16) or
+			Shift_Left(U32(Src(Src'First + 3)), 24));
 	begin
 		for I in W'Range loop
-			W(I) := Load_32(B(I * 4 .. (I * 4 + 3)));
+			W(I) := Load_32(B(B'First + I * 4 ..
+							B'First + (I * 4 + 3)));
 		end loop;
 	end Words_From_Little_Endian_Bytes;
 
@@ -322,8 +349,6 @@ package body Blake3 is
 				Flags: in U32) return U32x8 is (Chaining_Value(
 				Parent_Output(Left_Child_CV, Right_Child_CV,
 				Key_Words, Flags)));
-
-	-- NOT IMPLEMENTED: New_Keyed, New_Derive_Key
 
 	procedure Push_Stack(Self: in out Hasher; CV: in U32x8) 
 					with Pre => (Self.CV_Stack_Len < 54) is

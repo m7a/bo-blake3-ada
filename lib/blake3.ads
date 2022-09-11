@@ -5,13 +5,20 @@ with Interfaces;
 
 package Blake3 is
 
-	type U8     is mod 2**8;
-	type U32    is new Interfaces.Unsigned_32;
-	type Octets is array (U32 range <>) of U8;
-	type Hasher is tagged limited private;
+	type    U8     is mod 2**8;
+	type    U32    is new Interfaces.Unsigned_32;
+	type    Octets is array (U32 range <>) of U8;
+	subtype U8x32  is Octets(0..31);
+	type    Hasher is tagged limited private;
+
+	Key_Len: constant U32 := 32;
 
 	function  Init return Hasher;
-	procedure Update(Self: in out Hasher; Input: in String);
+	function  Init(Key: in U8x32) return Hasher;
+	function  Init(Key: in String) return Hasher
+					with Pre => Key'Length = Key_Len;
+	procedure Update(Self: in out Hasher; Input: in String)
+					with Pre => Input'Length > 0;
 	procedure Update(Self: in out Hasher; Input: in Octets);
 	function  Final(Self: in Hasher) return String;
 	procedure Final(Self: in Hasher; Out_Slice: out Octets);
@@ -36,7 +43,6 @@ private
 
 	Out_Len:             constant U32 := 32;
 	Chunk_Size:          constant U32 := (2 * Out_Len);
-	Key_Len:             constant U32 := 32;
 	Block_Len:           constant U32 := 64;
 	Chunk_Len:           constant U32 := 1024;
 
@@ -84,6 +90,7 @@ private
 		Flags:        U32;
 	end record;
 	
+	procedure Words_From_Little_Endian_Bytes(B: in Octets; W: out Words);
 	function Chaining_Value(Self: in Output_T) return U32x8;
 	procedure Root_Output_Bytes(Self: in Output_T; Out_Slice: out Octets);
 	function To_LE_Bytes(Word: in U32; Output_Length: in U32) return Octets
