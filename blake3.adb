@@ -1,24 +1,118 @@
--- CC0 code translated from reference_impl.rs
--- https://raw.githubusercontent.com/BLAKE3-team/BLAKE3/master/reference_impl/reference_impl.rs
--- see also
--- /data/main/114_projects_wrk_wrpru/114.115_test_extract_bupstash/testcpp/zblake3.cpp
+with Ada.Text_IO;
 
 package body Blake3 is
 
-	function Init return Ctx is
-	begin
-		return (a => 0);
-	end Init;
+	-- Public API
 
-	procedure Update(C: in out Ctx; D: in String) is
+	-- No New_Internal function since this causes problems regarding
+	-- dispatch
+	function Init return Hasher is
+				(Chunk_State => New_Chunk_State(IV, 0, 0),
+				Key_Words    => IV,
+				CV_Stack     => (others => (others => 0)),
+				CV_Stack_Len => 0,
+				Flags        => 0);
+
+	procedure Update(Self: in out Hasher; Input: in String) is
+		Conv: Octets(0 .. Input'Length - 1);
 	begin
-		null;
+		for I in Conv'Range loop
+			Conv(I) := U8(Character'Pos(Input(Input'First +
+								Integer(I))));
+		end loop;
+		Self.Update(Conv);
 	end Update;
 
-	function Final(C: in out Ctx) return String is
+	function Final(Self: in Hasher) return String is
+		Conv:   Octets(0 .. 31);
+		Result: String(1 .. 32);
 	begin
-		return "<hello>";
+		Self.Final(Conv);
+		for I in Result'Range loop
+			Result(I) := Character'Val(Conv(U32(I - Result'First)));
+		end loop;
+		return Result;
 	end Final;
+
+	procedure Final(Self: in Hasher; Out_Slice: out Octets) is
+		Output:                 Output_T := Self.Chunk_State.Output;
+		Parent_Nodes_Remaining: U8       := Self.CV_Stack_Len;
+	begin
+		while Parent_Nodes_Remaining > 0 loop
+			Parent_Nodes_Remaining := Parent_Nodes_Remaining - 1;
+			Output := Parent_Output(
+				Self.CV_Stack(Parent_Nodes_Remaining),
+				Chaining_Value(Output),
+				Self.Key_Words,
+				Self.Flags
+			);
+		end loop;
+		Root_Output_Bytes(Output, Out_Slice);
+	end Final;
+
+	-- Generic Auxiliary API
+
+	procedure Generic_Update(Self: in out Self_T; Input: in Octets) is
+		Pos_In_Input: U32 := Input'First;
+		Want: U32;
+		Take: U32;
+	begin
+		loop
+			if State_Length(Self) = Comparison_Length then
+				Process_Complete_Entity(Self);
+			end if;
+
+			Want := Comparison_Length - State_Length(Self);
+			Take := U32'Min(Want, Input'Length -
+						(Pos_In_Input - Input'First));
+			exit when Take = 0;
+
+			Update_Inner(Self, Input(Pos_In_Input ..
+						Pos_In_Input + Take - 1));
+			Pos_In_Input := Pos_In_Input + Take;
+		end loop;
+	end Generic_Update;
+
+	function Block_Length(Self: in Chunk_State_T) return U32 is
+							(U32(Self.Block_Len));
+
+	procedure Update_Chunk_State_Inner(Self: in out Chunk_State_T;
+					Substr: in Octets) is
+		Take: constant U32 := Substr'Length;
+	begin
+		Self.Block(U32(Self.Block_Len) .. U32(Self.Block_Len) +
+							Take - 1) := Substr;
+		Self.Block_Len := Self.Block_Len + U8(Take);
+	end Update_Chunk_State_Inner;
+
+	procedure Update_Chunk_State is new Generic_Update(
+		Self_T                  => Chunk_State_T,
+		Comparison_Length       => Block_Len,
+		State_Length            => Block_Length,
+		Process_Complete_Entity => Compress_Full_Block_Buffer,
+		Update_Inner            => Update_Chunk_State_Inner
+	);
+
+	function Chunk_State_Length(Self: in Hasher) return U32 is
+						(Self.Chunk_State.Length);
+
+	procedure Update_Chunk_State(Self: in out Hasher; Input: in Octets) is
+	begin
+		Update_Chunk_State(Self.Chunk_State, Input);
+	end;
+
+	procedure Update_Hasher is new Generic_Update(
+		Self_T                  => Hasher,
+		Comparison_Length       => Chunk_Len,
+		State_Length            => Chunk_State_Length,
+		Process_Complete_Entity => Finalize_Complete_Chunk_Reset_State,
+		Update_Inner            => Update_Chunk_State
+	);
+
+	procedure Update(Self: in out Hasher; Input: in Octets)
+							renames Update_Hasher;
+
+	-- Internal Functions
 
 	procedure G(State: in out U32x16; A, B, C, D, MX, MY: in U32) is
 	begin
@@ -34,16 +128,15 @@ package body Blake3 is
 
 	procedure Round(State: in out U32x16; m: in U32x16) is
 	begin
-		-- Mix the columns
-		G(State, 0, 4, 8, 12, M(0), M(1));
-		G(State, 1, 5, 9, 13, M(2), M(3));
-		G(State, 2, 6, 10, 14, M(4), M(5));
-		G(State, 3, 7, 11, 15, M(6), M(7));
-		-- Mix the diagonals
-		G(State, 0, 5, 10, 15, M(8), M(9));
+		G(State, 0, 4, 8,  12, M(0),  M(1));
+		G(State, 1, 5, 9,  13, M(2),  M(3));
+		G(State, 2, 6, 10, 14, M(4),  M(5));
+		G(State, 3, 7, 11, 15, M(6),  M(7));
+
+		G(State, 0, 5, 10, 15, M(8),  M(9));
 		G(State, 1, 6, 11, 12, M(10), M(11));
-		G(State, 2, 7, 8, 13, M(12), M(13));
-		G(State, 3, 4, 9, 14, M(14), M(15));
+		G(State, 2, 7, 8,  13, M(12), M(13));
+		G(State, 3, 4, 9,  14, M(14), M(15));
 	end Round;
 
 	procedure Permute(M: in out U32x16) is
@@ -65,15 +158,14 @@ package body Blake3 is
 			return U32x16 is
 		Tail: constant Words(0..3) := (Counter_Low(Counter),
 				Counter_High(Counter), Block_Len, Flags);
-		State: U32x16 := U32x16(Words(Chaining_Value) & IV(0..3) &
-				Tail);
+		State: U32x16 := Words'(Chaining_Value & IV(0..3) & Tail);
 		Block: U32x16 := Block_Words;
 	begin
-		for I in 1..7 loop
+		for I in 1 .. 7 loop
 			Round(State, Block); -- round I
 			Permute(Block);
 		end loop;
-		for I in U32'(0)..U32'(7) loop
+		for I in U32'(0) .. U32'(7) loop
 			State(I    ) := State(I) xor State(I + 8);
 			State(I + 8) := State(I) xor Chaining_Value(I);
 		end loop;
@@ -84,111 +176,178 @@ package body Blake3 is
 					(U32x8(Compression_Output(0..7)));
 
 	function Load_32(Src: in Octets) return U32 is
-		(U32(Src(0)) or Shift_Left(U32(Src(1)), 8) or
-		Shift_Left(U32(Src(2)), 16) or Shift_Left(U32(Src(3)), 24));
+		(U32(Src(Src'First)) or Shift_Left(U32(Src(Src'First + 1)), 8)
+		or Shift_Left(U32(Src(Src'First + 2)), 16) or
+		Shift_Left(U32(Src(Src'First + 3)), 24));
 
-	procedure Words_From_Little_Endian_Bytes(B: in Octets; W: out Words)
-				with Pre => ((4 * B'Length = W'Length) and
-					(W'First = 0 and B'First = 0)) is
+	procedure Words_From_Little_Endian_Bytes(B: in Octets; W: out Words) is
 	begin
 		for I in W'Range loop
 			W(I) := Load_32(B(I * 4 .. (I * 4 + 3)));
 		end loop;
 	end Words_From_Little_Endian_Bytes;
 
-	function Chaining_Value(Self: in Output) return U32x8 is
+	function Chaining_Value(Self: in Output_T) return U32x8 is
 			(First_8_Words(Compress(Self.Input_Chaining_Value,
 			Self.Block_Words, Self.Counter, Self.Block_Len,
 			Self.Flags)));
 
-	procedure Root_Output_Bytes(Self: in Output; Out_Slice: out Octets) is
-		-- TODO THIS COUNTER IS u64 in original implementation, why?
+	procedure Root_Output_Bytes(Self: in Output_T; Out_Slice: out Octets) is
+
 		Output_Block_Counter: U32 := 0;
-		Chunk_Size: constant U32 := (2 * Out_Len);
+
+		procedure Output_Block(Real_Chunk_Last: in U32;
+							Words: in U32x16) is
+			Current_Octet: U32 := Out_Slice'First +
+						Output_Block_Counter *
+						Chunk_Size;
+			Current_Word:  U32 := Words'First;
+			Step_Size:     U32;
+		begin
+			loop
+				Step_Size := U32'Min(4,
+					Real_Chunk_Last - Current_Octet + 1);
+
+				exit when Step_Size = 0;
+
+				Out_Slice(Current_Octet ..
+					Current_Octet + Step_Size - 1) :=
+					To_LE_Bytes(Words(Current_Word),
+					Step_Size);
+				Current_Octet := Current_Octet + Step_Size;
+				Current_Word  := Current_Word  + 1;
+			end loop;
+		end Output_Block;
 	begin
 		while Output_Block_Counter * Chunk_Size < Out_Slice'Length loop
-			declare
-				Ideal_Chunk_End: constant U32 := Chunk_Size *
-						(Output_Block_Counter + 1) - 1;
-				Real_Chunk_End: constant U32 :=
-					(if Out_Slice'Last < Ideal_Chunk_End
-						then (Out_Slice'Last)
-						else (Ideal_Chunk_End));
-				-- TODO z might it be that we need to write
-				--      to the chunk rather than define it
-				--      this way here?
-				--Out_Block: Octets := Out_Slice(
-				--		Output_Block_Counter *
-				--		Chunk_Size .. Real_Chunk_End);
-			begin
-				null;
-			end;
+			Output_Block(
+				Real_Chunk_Last => U32'Min(
+					Out_Slice'Last,
+					Out_Slice'First + Chunk_Size *
+						(Output_Block_Counter + 1) - 1
+				),
+				Words => Compress(
+					Self.Input_Chaining_Value,
+					Self.Block_Words,
+					U64(Output_Block_Counter),
+					Self.Block_Len,
+					Self.Flags or Root
+				)
+			);
+			Output_Block_Counter := Output_Block_Counter + 1;
 		end loop;
-		-- chunks_mut(N) := in chunks of size N (less if last + misfit)
-		null;
 	end Root_Output_Bytes;
 
---static uint32_t rotr32(uint32_t w, uint32_t c) {
---  return (w >> c) | (w << (32 - c));
---}
---
--- Translated Functions for C++ (at line 97)
+	function To_LE_Bytes(Word: in U32; Output_Length: in U32)
+								return Octets is
+		Result: Octets(0 .. Output_Length - 1);
+		Part:   U32 := Word;
+		I:      U32 := 0;
+	begin
+		while I < Output_Length loop
+			Result(I) := U8(Part and 16#ff#);
+			Part      := Shift_Right(Part, 8);
+			I         := I + 1;
+		end loop;
+		return Result;
+	end To_LE_Bytes;
 
---	function Highest_One(XR: in U64) return U32 is
---		X: U64 := XR;
---		C: U32 := 0;
---	begin
---		if (X and 16#ffffffff00000000#) /= 0 then
---			X := Shift_Right(X, 32);
---			C := C + 32;
---		end if;
---		if (X and 16#00000000ffff0000#) /= 0 then
---			X := Shift_Right(X, 16);
---			C := C + 16;
---		end if;
---		if (X and 16#000000000000ff00#) /= 0 then
---			X := Shift_Right(X,  8);
---			C := C +  8;
---		end if;
---		if (X and 16#00000000000000f0#) /= 0 then
---			X := Shift_Right(X,  4);
---			C := C +  4;
---		end if;
---		if (X and 16#000000000000000c#) /= 0 then
---			X := Shift_Right(X,  2);
---			C := C +  2;
---		end if;
---		if (X and 16#0000000000000002#) /= 0 then
---			C := C +  1;
---		end if;
---		return C;
---	end Highest_One;
---
---	function Popcnt(XR: in U64) return U32 is
---		X:     U64 := XR;
---		Count: U32 := 0;
---	begin
---		while X /= 0 loop
---			Count := Count + 1;
---			X := X and (X - 1);
---		end loop;
---		return Count;
---	end Popcnt;
---
---	function Round_Down_To_Power_Of_2(XR: in U64) return U64 is
---					(Shift_Left(1, Highest_One(XR or 1)));
---
---	procedure Load_Key_Words(Key: in Blake3_Key; Key_Words: out U32x8) is
---	begin
---		for I in 0..7 loop
---			Key_Words(I) := Load_32(Octets(Key(I .. (I+3))));
---		end loop;
---	end Load_Key_Words;
---
---	procedure Store_CV_Words(Bytes: out Octets, CV_Words: in U32x8) is
---	begin
---		null;
---	end Store_CV_Words;
---
+	function New_Chunk_State(Key_Words: in U32x8; Chunk_Counter_I: in U64;
+					Flags_I: in U32) return Chunk_State_T is
+					(Chaining_Value   => Key_Words,
+					Chunk_Counter     => Chunk_Counter_I,
+					Block             => (others => 0),
+					Block_Len         => 0,
+					Blocks_Compressed => 0,
+					Flags             => Flags_I);
+
+	function Length(Self: in Chunk_State_T) return U32 is
+				(Block_Len * U32(Self.Blocks_Compressed) +
+				U32(Self.Block_Len));
+
+	function Start_Flag(Self: in Chunk_State_T) return U32 is
+			(if Self.Blocks_Compressed = 0 then Chunk_Start else 0);
+
+	procedure Compress_Full_Block_Buffer(Self: in out Chunk_State_T) is
+		Block_Words: U32x16;
+	begin
+		Words_From_Little_Endian_Bytes(Self.Block, Block_Words);
+		Self.Chaining_Value := First_8_Words(Compress(
+			Self.Chaining_Value, Block_Words, Self.Chunk_Counter,
+			Block_Len, Self.Flags or Self.Start_Flag
+		));
+		Self.Blocks_Compressed := Self.Blocks_Compressed + 1;
+		Self.Block             := (others => 0);
+		Self.Block_Len         := 0;
+	end Compress_Full_Block_Buffer;
+
+	function Output(Self: in Chunk_State_T) return Output_T is
+		Block_Words_I: U32x16;
+	begin
+		Words_From_Little_Endian_Bytes(Self.Block, Block_Words_I);
+		return (
+			Input_Chaining_Value => Self.Chaining_Value,
+			Block_Words => Block_Words_I,
+			Counter     => Self.Chunk_Counter,
+			Block_Len   => U32(Self.Block_Len),
+			Flags       => (Self.Flags or Self.Start_Flag or
+								Chunk_End)
+		);
+	end Output;
+
+	function Parent_Output(Left_Child_CV, Right_Child_CV, Key_Words:
+				in U32x8; Flags_I: in U32) return Output_T is
+		(
+			Input_Chaining_Value => Key_Words,
+			Block_Words          => Left_Child_CV & Right_Child_CV,
+			Counter              => 0,
+			Block_Len            => Block_Len,
+			Flags                => Parent or Flags_I
+		);
+
+	function Parent_CV(Left_Child_CV, Right_Child_CV, Key_Words: in U32x8;
+				Flags: in U32) return U32x8 is (Chaining_Value(
+				Parent_Output(Left_Child_CV, Right_Child_CV,
+				Key_Words, Flags)));
+
+	-- TODO NOT IMPLEMENTED: New_Keyed, New_Derive_Key
+
+	procedure Push_Stack(Self: in out Hasher; CV: in U32x8) 
+					with Pre => (Self.CV_Stack_Len < 54) is
+	begin
+		Self.CV_Stack(Self.CV_Stack_Len) := CV;
+		Self.CV_Stack_Len := Self.CV_Stack_Len + 1;
+	end Push_Stack;
+
+	function Pop_Stack(Self: in out Hasher) return U32x8
+				with Pre => (Self.CV_Stack_Len > 0) is
+	begin
+		Self.CV_Stack_Len := Self.CV_Stack_Len - 1;
+		return Self.CV_Stack(Self.CV_Stack_Len);
+	end Pop_Stack;
+
+	procedure Add_Chunk_Chaining_Value(Self: in out Hasher;
+				New_CV_I: in U32x8; Total_Chunks_I: U64) is
+		New_CV:       U32x8 := New_CV_I;
+		Total_Chunks: U64   := Total_Chunks_I;
+	begin
+		while (Total_Chunks and 1) = 0 loop
+			New_CV := Parent_CV(Self.Pop_Stack, New_CV,
+						Self.Key_Words, Self.Flags);
+			Total_Chunks := Shift_Right(Total_Chunks, 1);
+		end loop;
+		Self.Push_Stack(New_CV);
+	end Add_Chunk_Chaining_Value;
+
+	procedure Finalize_Complete_Chunk_Reset_State(Self: in out Hasher) is
+		Chunk_CV:     constant U32x8 :=
+					Chaining_Value(Self.Chunk_State.Output);
+		Total_Chunks: constant U64 :=
+					Self.CHunk_State.Chunk_Counter + 1;
+	begin
+		Self.Add_Chunk_Chaining_Value(Chunk_CV, Total_Chunks);
+		Self.Chunk_State := New_Chunk_State(Self.Key_Words,
+						Total_Chunks, Self.Flags);
+	end Finalize_Complete_Chunk_Reset_State;
 
 end Blake3;

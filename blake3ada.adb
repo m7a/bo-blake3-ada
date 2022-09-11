@@ -1,7 +1,6 @@
 with Ada.Text_IO;
-with Ada.Characters.Latin_1;
-with Ada.IO_Exceptions;
-
+with Ada.Text_IO.Text_Streams;
+with Ada.Streams;
 with Blake3;
 
 procedure Blake3Ada is
@@ -139,19 +138,35 @@ procedure Blake3Ada is
 		Character'Val(254) => "fe", Character'Val(255) => "ff"
 	);
 
-	Ctx: Blake3.Ctx := Blake3.Init;
+	Ctx: Blake3.Hasher := Blake3.Init;
+
+	Stream_Ptr: constant access Ada.Streams.Root_Stream_Type'Class :=
+		Ada.Text_IO.Text_Streams.Stream(Ada.Text_IO.Current_Input);
+	Buffer: Ada.Streams.Stream_Element_Array(0 .. 4095);
+	Last:   Ada.Streams.Stream_Element_Offset;
 begin
 	loop
-		Ctx.Update(Ada.Text_IO.Get_Line & Ada.Characters.Latin_1.CR);
-	end loop;
-exception
-	when Ada.IO_Exceptions.End_Error =>
+		Ada.Streams.Read(Stream_Ptr.all, Buffer, Last);
+		exit when Integer(Last) < 0;
+
 		declare
-			RV: constant String := Ctx.Final;
+			Data: String(1 .. Integer(Last) + 1);
+			for Data'Address use Buffer'Address;
+			--Data: String(1 .. Integer(Last) + 1) := String(Buffer(0..Last));
 		begin
-			for I in RV'Range loop
-				Ada.Text_IO.Put(Hex_Table(RV(I)));
-			end loop;
-			Ada.Text_IO.New_Line;
+			-- for I in Data'Range loop
+			-- 	Data(I) := Character'Val(Buffer(Ada.Streams.
+			-- 			Stream_Element_Offset(I - 1)));
+			-- end loop;
+			Ctx.Update(Data);
 		end;
+	end loop;
+	declare
+		RV: constant String := Ctx.Final;
+	begin
+		for I in RV'Range loop
+			Ada.Text_IO.Put(Hex_Table(RV(I)));
+		end loop;
+		Ada.Text_IO.New_Line;
+	end;
 end Blake3Ada;
