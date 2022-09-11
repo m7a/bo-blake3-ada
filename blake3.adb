@@ -1,4 +1,5 @@
 with Ada.Text_IO;
+with Ada.Assertions;
 
 package body Blake3 is
 
@@ -15,22 +16,26 @@ package body Blake3 is
 
 	procedure Update(Self: in out Hasher; Input: in String) is
 		Conv: Octets(0 .. Input'Length - 1);
+		for Conv'Address use Input'Address;
 	begin
-		for I in Conv'Range loop
-			Conv(I) := U8(Character'Pos(Input(Input'First +
-								Integer(I))));
-		end loop;
+		-- this slows down the processing a whole lot, skip as long as
+		-- it works this way...
+		-- for I in Conv'Range loop
+		-- 	Conv(I) := U8(Character'Pos(Input(Input'First +
+		-- 						Integer(I))));
+		-- end loop;
 		Self.Update(Conv);
 	end Update;
 
 	function Final(Self: in Hasher) return String is
 		Conv:   Octets(0 .. 31);
 		Result: String(1 .. 32);
+		for Result'Address use Conv'Address;
 	begin
 		Self.Final(Conv);
-		for I in Result'Range loop
-			Result(I) := Character'Val(Conv(U32(I - Result'First)));
-		end loop;
+		--for I in Result'Range loop
+		--	Result(I) := Character'Val(Conv(U32(I - Result'First)));
+		--end loop;
 		return Result;
 	end Final;
 
@@ -53,19 +58,23 @@ package body Blake3 is
 	-- Generic Auxiliary API
 
 	procedure Generic_Update(Self: in out Self_T; Input: in Octets) is
-		Pos_In_Input: U32 := Input'First;
-		Want: U32;
-		Take: U32;
+		Pos_In_Input:     U32 := Input'First;
+		Available_Length: U32;
+		Want:             U32;
+		Take:             U32;
 	begin
 		loop
+			Available_Length := Input'Length -
+						(Pos_In_Input - Input'First);
+			exit when Available_Length = 0;
+
 			if State_Length(Self) = Comparison_Length then
 				Process_Complete_Entity(Self);
 			end if;
 
 			Want := Comparison_Length - State_Length(Self);
-			Take := U32'Min(Want, Input'Length -
-						(Pos_In_Input - Input'First));
-			exit when Take = 0;
+			Take := U32'Min(Want, Available_Length);
+			Ada.Assertions.Assert(Take > 0);
 
 			Update_Inner(Self, Input(Pos_In_Input ..
 						Pos_In_Input + Take - 1));
@@ -153,6 +162,7 @@ package body Blake3 is
 	function Counter_High(XR: in U64) return U32 is
 					(U32(Shift_Right(XR, 32)));
 
+	-- PERF CRITICAL
 	function Compress(Chaining_Value: in U32x8; Block_Words: in U32x16;
 			Counter: in U64; Block_Len: in U32; Flags: in U32)
 			return U32x16 is
@@ -173,7 +183,7 @@ package body Blake3 is
 	end Compress;
 
 	function First_8_Words(Compression_Output: in U32x16) return U32x8 is
-					(U32x8(Compression_Output(0..7)));
+					(U32x8(Compression_Output(0 .. 7)));
 
 	function Load_32(Src: in Octets) return U32 is
 		(U32(Src(Src'First)) or Shift_Left(U32(Src(Src'First + 1)), 8)
@@ -268,8 +278,10 @@ package body Blake3 is
 	function Start_Flag(Self: in Chunk_State_T) return U32 is
 			(if Self.Blocks_Compressed = 0 then Chunk_Start else 0);
 
+	-- PERF CRITICAL
 	procedure Compress_Full_Block_Buffer(Self: in out Chunk_State_T) is
 		Block_Words: U32x16;
+		--for Block_Words'Address use Self.Block'Address;
 	begin
 		Words_From_Little_Endian_Bytes(Self.Block, Block_Words);
 		Self.Chaining_Value := First_8_Words(Compress(
@@ -283,6 +295,7 @@ package body Blake3 is
 
 	function Output(Self: in Chunk_State_T) return Output_T is
 		Block_Words_I: U32x16;
+		--for Block_Words_I'Address use Self.Block'Address;
 	begin
 		Words_From_Little_Endian_Bytes(Self.Block, Block_Words_I);
 		return (
@@ -310,7 +323,7 @@ package body Blake3 is
 				Parent_Output(Left_Child_CV, Right_Child_CV,
 				Key_Words, Flags)));
 
-	-- TODO NOT IMPLEMENTED: New_Keyed, New_Derive_Key
+	-- NOT IMPLEMENTED: New_Keyed, New_Derive_Key
 
 	procedure Push_Stack(Self: in out Hasher; CV: in U32x8) 
 					with Pre => (Self.CV_Stack_Len < 54) is
