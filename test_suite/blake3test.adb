@@ -8,9 +8,6 @@ use  Interfaces;
 with Blake3;
 use  Blake3;
 
---with Ada.Text_IO.Text_Streams;
---with Ada.Streams;
-
 -- ./blake3test < ../test_vectors/test_vectors.csv
 
 procedure Blake3Test is
@@ -61,29 +58,21 @@ procedure Blake3Test is
 				end loop;
 
 				Regular_Ctx.Update(Data);
-				-- TODO DEBUG ONLY
-				--Keyed_Ctx.Update(Data);
+				Keyed_Ctx.Update(Data);
 			end;
 		end if;
 
 		Regular_Ctx.Final(Result_Regular);
-		--Keyed_Ctx.Final(Result_Keyed);
-
-		Put_Line("TEST COMPLETED W LENGTH = " & Integer'Image(Length));
-
-		for I in Hash'Range loop
-			if Hash(I) /= Result_Regular(I) then
-				Put_Line("REGULAR MISMATCH @I = " & U32'Image(I));
-			else
-				Put_Line("              ok @I = " & U32'Image(I));
-			end if;
-		end loop;
+		Keyed_Ctx.Final(Result_Keyed);
 
 		if Result_Regular = Hash and Result_Keyed = Keyed then
 			Put_Line("[ OK ] Len = " & Integer'Image(Length));
 		else
-			Put_Line("[FAIL] Len = " & Integer'Image(Length) & " Expected=(" & Bin_To_Hex(Hash) & ", " & Bin_To_Hex(Keyed) & "), Got=(" & Bin_To_Hex(Result_Regular) & ", " & Bin_To_Hex(Result_Keyed) & ")");
-			raise Constraint_Error with "TODO DEBUG TEST FAILED";
+			Put_Line("[FAIL] Len = " & Integer'Image(Length) &
+					" Expected=(" & Bin_To_Hex(Hash) &
+					", " & Bin_To_Hex(Keyed) & "), Got=(" &
+					Bin_To_Hex(Result_Regular) & ", " &
+					Bin_To_Hex(Result_Keyed) & ")");
 		end if;
 	end Process_Test_Vector;
 
@@ -125,10 +114,11 @@ procedure Blake3Test is
 				Integer'Image(Length) & ", Hash_Offset=" &
 				Integer'Image(Hash_Offset));
 		declare
-			Regular: constant String := Line(Hash_Offset .. Keyed_Offset - 2);
-			Keyed:   constant String := Line(Keyed_Offset .. Line'Last);
+			Regular: constant String :=
+					Line(Hash_Offset .. Keyed_Offset - 2);
+			Keyed:   constant String :=
+					Line(Keyed_Offset .. Line'Last);
 		begin
-			Ada.Text_IO.Put_Line("Data len = " & Integer'Image(Length) & ", regular len = " & Integer'Image(Regular'Length) & " Keyed Len = " & Integer'Image(Keyed'Length) & " regular val = <" & Regular & ">");
 			Process_Test_Vector(Length, Hex_To_Bin(Regular),
 							Hex_To_Bin(Keyed));
 		end;

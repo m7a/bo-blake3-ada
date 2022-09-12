@@ -1,5 +1,4 @@
 with Ada.Assertions;
-with Ada.Text_IO;
 
 package body Blake3 is
 
@@ -73,7 +72,6 @@ package body Blake3 is
 				Self.Flags
 			);
 		end loop;
-		Ada.Text_IO.Put_Line("Out_Slice'First = " & U32'Image(Out_Slice'First) & ", Out_Slice'Last = " & U32'Image(Out_Slice'Last) & ", Out_Slice'Length = " & Integer'Image(Out_Slice'Length));
 		Root_Output_Bytes(Output, Out_Slice);
 	end Final;
 
@@ -157,7 +155,7 @@ package body Blake3 is
 		State(B) := Rotate_Right(State(B) xor State(C), 7);
 	end G;
 
-	procedure Round(State: in out U32x16; m: in U32x16) is
+	procedure Round(State: in out U32x16; M: in U32x16) is
 	begin
 		G(State, 0, 4, 8,  12, M(0),  M(1));
 		G(State, 1, 5, 9,  13, M(2),  M(3));
@@ -173,7 +171,7 @@ package body Blake3 is
 	procedure Permute(M: in out U32x16) is
 		Permuted: U32x16;
 	begin
-		for I in Permuted'Range  loop
+		for I in Permuted'Range loop
 			Permuted(I) := M(MSG_Permutation(I));
 		end loop;
 		M := Permuted;
@@ -193,13 +191,14 @@ package body Blake3 is
 		State: U32x16 := Words'(Chaining_Value & IV(0..3) & Tail);
 		Block: U32x16 := Block_Words;
 	begin
-		for I in 1 .. 7 loop
-			Round(State, Block); -- round I
+		for I in 1 .. 6 loop
+			Round(State, Block); -- round 1..6
 			Permute(Block);
 		end loop;
+		Round(State, Block); -- round 7
 		for I in U32'(0) .. U32'(7) loop
-			State(I    ) := State(I) xor State(I + 8);
-			State(I + 8) := State(I) xor Chaining_Value(I);
+			State(I    ) := State(I    ) xor State(I + 8);
+			State(I + 8) := State(I + 8) xor Chaining_Value(I);
 		end loop;
 		return State;
 	end Compress;
@@ -230,6 +229,7 @@ package body Blake3 is
 			Self.Flags)));
 
 	procedure Root_Output_Bytes(Self: in Output_T; Out_Slice: out Octets) is
+
 
 		Output_Block_Counter: U32 := 0;
 
