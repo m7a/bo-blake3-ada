@@ -29,7 +29,7 @@
 
 <target name="dist-clean">
 	<delete file="lib${masysma.target}.so"/>
-	<delete file="lib${masysma.target}.ali"/>
+	<delete file="${masysma.target}.ali"/>
 </target>
 
 </project>
