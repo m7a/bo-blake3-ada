@@ -7,6 +7,13 @@
 <property name="masysma.ada.compile.8" value="-largs"/>
 <property name="masysma.ada.compile.9" value="-lblake3"/>
 
+<target name="run" depends="build">
+	<exec executable="${local.root}/blake3test">
+		<redirector input="${local.root}/../test_vectors/test_vectors.csv"/>
+		<env key="LD_LIBRARY_PATH" value="${local.root}/../lib"/>
+	</exec>
+</target>
+
 <!-- CONSTANT TPL IMPORT -->
 <property environment="env"/>
 <condition property="masysma.internal.includepath.rel" value="${env.MDVL_CI_PHOENIX_ROOT}" else="../.."><isset property="env.MDVL_CI_PHOENIX_ROOT"/></condition>
