@@ -152,12 +152,7 @@ begin
 		declare
 			Data: String(1 .. Integer(Last) + 1);
 			for Data'Address use Buffer'Address;
-			--Data: String(1 .. Integer(Last) + 1) := String(Buffer(0..Last));
 		begin
-			-- for I in Data'Range loop
-			-- 	Data(I) := Character'Val(Buffer(Ada.Streams.
-			-- 			Stream_Element_Offset(I - 1)));
-			-- end loop;
 			Ctx.Update(Data);
 		end;
 	end loop;

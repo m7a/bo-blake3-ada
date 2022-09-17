@@ -1,0 +1,5 @@
+libblake3-ada-dev (1.0.0) stable; urgency=medium
+
+  * Package created with MDPC 2
+
+ -- Linux-Fan <info@masysma.net>  Sat, 17 Sep 2022 14:06:53 +0200

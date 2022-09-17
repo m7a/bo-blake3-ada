@@ -1,3 +1,6 @@
+-- BLAKE3 Implementation ported to Ada 1.0.0, 2022 Ma_Sys.ma <info@masysma.net>.
+-- Available under CC0, see blake3.ads for full license text
+
 with Ada.Assertions;
 
 package body Blake3 is

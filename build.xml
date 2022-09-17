@@ -4,17 +4,26 @@
 <!-- APPLICATION METADATA -->
 <property name="mdpc.name"      value="libblake3-ada-dev"/>
 <property name="mdpc.section"   value="libdevel"/>
-<!-- currently restricted due to install path -->
+<!-- currently restricted due to install path x86_64-linux-gnu -->
 <property name="mdpc.arch"      value="amd64"/>
-<property name="mdpc.descrs"    value="Blake3 reference Implementation Ported to Ada"/>
+<property name="mdpc.descrs"    value="BLAKE3 Reference Implementation ported to Ada"/>
+<property name="mdpc.copyright.file"><![CDATA[
+Files: *
+Copyright: (copyright disclaimed) 2022 Ma_Sys.ma <info@masysma.net>
+License: CC0-1.0
+ See /usr/share/common-licenses/CC0-1.0 on any Debian system.
+]]></property>
 <property name="mdpc.descrl">
- This package provides the Blake3 hash function as an shared library written in
- Ada. The implementation was translated from the original Rust reference
- implementation.
+ This package provides the BLAKE3 hash function as an shared library written
+ in Ada. The implementation was translated from the original Rust reference
+ implementation. It supports hashing and keyed hashing but does not currently
+ implement key derivation.
 </property>
 
 <property name="mdpc.file.install">
 lib/libblake3.so /usr/lib/x86_64-linux-gnu
+lib/blake3.ali /usr/lib/x86_64-linux-gnu/ada/adalib/blake3
+lib/blake3.ads /usr/share/ada/adainclude/blake3
 util/blake3ada /usr/bin
 </property>
 
