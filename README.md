@@ -46,9 +46,9 @@ The following dependencies are required for building:
 
 ## Install
 
-	mkdir -p /usr/local/lib/x86_64-linux-gnu/ada/adalib/blake3
-	install lib/libblake3.so /usr/local/lib/x86_64-linux-gnu
-	install lib/blake3.ali /usr/local/lib/x86_64-linux-gnu/ada/adalib/blake3
+	install -DsT lib/libblake3.so /usr/local/lib/x86_64-linux-gnu
+	install -m 644 -DT lib/blake3.ali /usr/local/lib/x86_64-linux-gnu/ada/adalib/blake3
+	install -m 644 -DT lib/blake3.ads /usr/share/ada/adainclude/blake3
 
 Repository Structure
 ====================
@@ -162,7 +162,6 @@ may look like then:
    |    +-- blake3.ads
    |    +-- blake3hello.adb
    |    +-- build.xml
-   |
   ...
 ~~~
 
@@ -193,11 +192,10 @@ look as follows:
    +-- sample/
    |    +-- blake3hello.adb
    |    +-- build.xml
-   |
   ...
 ~~~
 
-Compilation and invocation than have to account for the library not being
+Compilation and invocation then have to account for the library not being
 installed as follows:
 
 	gnatmake -o blake3hello blake3hello.adb -aO../lib -aI../lib -largs -lblake3
@@ -284,7 +282,7 @@ without incurring a notable performance overhead.
 
 Use this function to supply the data that is considered input into the
 (optionally keyed) BLAKE3 hashing function. The user is free to supply the
-internal type `Octets` which the library then interprets
+internal type `Octets` or a regular `String` which the library then interprets
 as `Octets` internally.
 
 This API expects the minimum number of bytes supplied to `Update` to be 1.
@@ -304,3 +302,20 @@ This alternative `Final` implementation uses the internal `Octets` datatype
 for output. Additionally, by providing an `Out_Slice` of different length,
 different lengths of hashes can be output. Note that BLAKE3 supports arbitrarily
 long outputs as needed.
+
+Rationale and Usage Recommendation
+==================================
+
+This library was created out of the need to process data from a Rust program
+that relies on BLAKE3 for all of its hashing operations. This should not deter
+you from using it for creating new hashes in new programs with this library,
+too. However, you are advised to also consider chosing a more widely supported
+hash function in order to avoid being dependent on a single implementation.
+
+Changes
+=======
+
+Feel free to send patches with bugfixes or missing functionality directly to
+<info@masysma.net>. Include a note to confirm that you are OK with these
+patches being included under CC0. Please note that API breaks are only accepted
+if _very strong reasons_ exist to motivate them.
