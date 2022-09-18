@@ -48,7 +48,7 @@ The following dependencies are required for building:
 
 	install -DsT lib/libblake3.so /usr/local/lib/x86_64-linux-gnu
 	install -m 644 -DT lib/blake3.ali /usr/local/lib/x86_64-linux-gnu/ada/adalib/blake3
-	install -m 644 -DT lib/blake3.ads /usr/share/ada/adainclude/blake3
+	install -m 644 -DT lib/blake3.ads /usr/local/share/ada/adainclude/blake3
 
 Repository Structure
 ====================
