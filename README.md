@@ -1,5 +1,5 @@
 ---
-section: 42
+section: 32
 x-masysma-name: blake3_ada
 title: BLAKE3 Hash Function for Ada
 date: 2022/09/13 21:12:43
