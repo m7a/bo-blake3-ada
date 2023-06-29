@@ -33,7 +33,7 @@ Compiling
 The following dependencies are required for building:
 
  * Ada compiler (`gcc`, `gnatmake`)
- * And build tool (`ant`)
+ * Ant build tool (`ant`)
 
 ## Compile
 
